@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Enron Style Lab</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>Enron Style Lab</h1>
+          <p id="statusText">Loading users...</p>
+        </div>
+        <div class="model-box">
+          <label for="modelInput">Model</label>
+          <input id="modelInput" value="llama3.1:8b" autocomplete="off" />
+        </div>
+      </header>
+
+      <section class="workspace">
+        <aside class="side-panel">
+          <label for="userSelect">User</label>
+          <select id="userSelect"></select>
+
+          <div class="user-stat-grid">
+            <div>
+              <span>Name</span>
+              <strong id="nameStat">-</strong>
+            </div>
+            <div>
+              <span>Mailbox</span>
+              <strong id="mailboxStat">-</strong>
+            </div>
+            <div>
+              <span>Profile</span>
+              <strong id="profileStat">-</strong>
+            </div>
+            <div>
+              <span>Queries</span>
+              <strong id="queryStat">-</strong>
+            </div>
+          </div>
+
+          <div class="style-panel">
+            <h2>Style</h2>
+            <p id="styleText"></p>
+          </div>
+        </aside>
+
+        <section class="composer">
+          <div class="prompt-row">
+            <label for="promptInput">Prompt</label>
+            <div class="toggle-row">
+              <input id="ollamaToggle" type="checkbox" checked />
+              <label for="ollamaToggle">Llama</label>
+            </div>
+          </div>
+          <textarea id="promptInput" spellcheck="true">Write me an email to Wendy telling her we need to get these files in by Wednesday.</textarea>
+
+          <div class="sample-row" aria-label="Prompt samples">
+            <button type="button" class="sample-btn" data-prompt="Hi, my name is Sarah. What's your name?">Intro</button>
+            <button type="button" class="sample-btn" data-prompt="Write a reply to Sarah: Can we reschedule Friday's call to Monday morning?">Schedule</button>
+            <button type="button" class="sample-btn" data-prompt="Write me an email to Wendy telling her we need to get these files in by Wednesday.">Deadline</button>
+            <button type="button" class="sample-btn" data-prompt="Write a reply to Alex: Please review the attached draft agreement when you have time.">Review</button>
+          </div>
+
+          <div class="action-row">
+            <button type="button" id="generateBtn">
+              <span class="btn-icon">↗</span>
+              Generate
+            </button>
+            <span id="runState"></span>
+          </div>
+
+          <section class="result-panel" aria-live="polite">
+            <div class="result-header">
+              <h2>Response</h2>
+              <button type="button" id="copyBtn" title="Copy response">⧉</button>
+            </div>
+            <pre id="resultText">Generated replies will appear here.</pre>
+          </section>
+        </section>
+      </section>
+
+      <section class="test-bench">
+        <div class="bench-header">
+          <div>
+            <h2>Test Bench</h2>
+            <p>Compare Llama against real held-out replies from the selected user.</p>
+          </div>
+          <div class="bench-controls">
+            <label for="testSelect">Example</label>
+            <select id="testSelect"></select>
+            <button type="button" id="runTestBtn">
+              <span class="btn-icon">↻</span>
+              Run Test
+            </button>
+          </div>
+        </div>
+
+        <div class="score-grid">
+          <div class="score-card">
+            <span>Word F1</span>
+            <strong id="wordF1Score">-</strong>
+          </div>
+          <div class="score-card">
+            <span>Length Match</span>
+            <strong id="lengthScore">-</strong>
+          </div>
+          <div class="score-card">
+            <span>Greeting</span>
+            <strong id="greetingScore">-</strong>
+          </div>
+          <div class="score-card">
+            <span>Sign-off</span>
+            <strong id="signoffScore">-</strong>
+          </div>
+        </div>
+
+        <div class="comparison-grid">
+          <section class="comparison-panel incoming-panel">
+            <div class="panel-title">
+              <h3>Incoming Prompt</h3>
+              <span id="testMeta">-</span>
+            </div>
+            <pre id="incomingText">Choose an example and run a test.</pre>
+          </section>
+
+          <section class="comparison-panel">
+            <div class="panel-title">
+              <h3>Actual Response</h3>
+              <span>gold</span>
+            </div>
+            <pre id="actualText">-</pre>
+          </section>
+
+          <section class="comparison-panel">
+            <div class="panel-title">
+              <h3>Llama Response</h3>
+              <span id="testState">not run</span>
+            </div>
+            <pre id="generatedTestText">-</pre>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

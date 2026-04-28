@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# Local generated data and model artifacts
+data/
+
+# Local secrets / environment files
+.env
+.venv/
+venv/
+
+# Editor state
+.vscode/*.log

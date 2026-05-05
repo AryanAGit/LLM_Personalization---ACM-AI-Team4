@@ -459,7 +459,7 @@ def evaluate_history(
                 model=model,
                 identity=history.get("inferred_name", ""),
             )
-            score = score_prediction(prediction, query["gold"])
+            score = score_prediction(prediction, query["gold"], profile=profile)
             score.update({"user_id": user_id, "query_id": query["id"]})
             scores.append(score)
             if len(examples) < 3:
@@ -470,7 +470,7 @@ def evaluate_history(
                         "input": query["input"],
                         "prediction": prediction,
                         "gold": query["gold"],
-                        "scores": score_prediction(prediction, query["gold"]),
+                        "scores": score_prediction(prediction, query["gold"], profile=profile),
                     }
                 )
             count += 1
@@ -482,39 +482,57 @@ def summarize_evaluation(scores: Sequence[dict], examples: Sequence[dict]) -> di
     if not scores:
         return {"count": 0, "metrics": {}, "examples": []}
 
+    # Metrics that exist in every score dict and are numeric (not None).
+    # `style_to_user` is excluded from the averaged summary because callers
+    # that omit `profile` will report it as None; per-call payloads still
+    # include it.
     metric_names = [
-        "word_f1",
+        "rouge1",
+        "rouge2",
+        "rougeL",
+        "chrf",
+        "entity_overlap",
         "length_ratio",
+        "style_to_gold",
+        "greeting_type_match",
+        "signoff_type_match",
+        "content_score",
+        "style_score",
+        # Backward-compat keys (legacy callers may still look these up).
+        "word_f1",
         "greeting_match",
         "signoff_match",
     ]
-    metrics = {
-        name: round(sum(score[name] for score in scores) / len(scores), 4)
-        for name in metric_names
-    }
+    metrics = {}
+    for name in metric_names:
+        values = [s.get(name) for s in scores if isinstance(s.get(name), (int, float))]
+        if values:
+            metrics[name] = round(sum(values) / len(values), 4)
+
+    # If every score had a populated style_to_user, surface that average too.
+    style_to_user_values = [
+        s.get("style_to_user") for s in scores
+        if isinstance(s.get("style_to_user"), (int, float))
+    ]
+    if style_to_user_values:
+        metrics["style_to_user"] = round(
+            sum(style_to_user_values) / len(style_to_user_values), 4
+        )
+
     return {"count": len(scores), "metrics": metrics, "examples": list(examples)}
 
 
-def score_prediction(prediction: str, gold: str) -> dict:
-    prediction_terms = tokenize(prediction)
-    gold_terms = tokenize(gold)
-    prediction_counts = Counter(prediction_terms)
-    gold_counts = Counter(gold_terms)
-    overlap = sum((prediction_counts & gold_counts).values())
-    precision = overlap / max(len(prediction_terms), 1)
-    recall = overlap / max(len(gold_terms), 1)
-    word_f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
+def score_prediction(prediction: str, gold: str, profile: Optional[Sequence[dict]] = None) -> dict:
+    """Delegate to the rich evaluator suite in `evaluators.py`.
 
-    prediction_len = len(prediction_terms)
-    gold_len = len(gold_terms)
-    length_ratio = min(prediction_len, gold_len) / max(prediction_len, gold_len, 1)
+    `profile` enables the `style_to_user` metric (style fingerprint of the
+    prediction vs the average of the user's profile emails). Callers that
+    don't have the profile handy may omit it; that field will be reported as
+    null.
+    """
+    from evaluators import score_prediction as _score_prediction
 
-    return {
-        "word_f1": round(word_f1, 4),
-        "length_ratio": round(length_ratio, 4),
-        "greeting_match": float(has_greeting(prediction) == has_greeting(gold)),
-        "signoff_match": float(has_signoff(prediction) == has_signoff(gold)),
-    }
+    return _score_prediction(prediction, gold, profile=profile)
 
 
 def retrieve_profile_examples(profile: Sequence[dict], prompt: str, top_k: int = 5) -> List[dict]:

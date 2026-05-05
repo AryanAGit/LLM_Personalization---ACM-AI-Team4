@@ -100,22 +100,71 @@
           </div>
         </div>
 
-        <div class="score-grid">
-          <div class="score-card">
-            <span>Word F1</span>
-            <strong id="wordF1Score">-</strong>
+        <div class="score-section">
+          <h4 class="score-section-title">Content Fidelity</h4>
+          <div class="score-grid">
+            <div class="score-card">
+              <span title="Unigram (single-word) F1 between prediction and gold reply.">ROUGE-1</span>
+              <strong id="rouge1Score">-</strong>
+            </div>
+            <div class="score-card">
+              <span title="Longest common subsequence F1 — captures word ordering, not just bag of words.">ROUGE-L</span>
+              <strong id="rougeLScore">-</strong>
+            </div>
+            <div class="score-card">
+              <span title="Character 3-gram F-score. Robust to morphology and minor wording differences.">chrF</span>
+              <strong id="chrfScore">-</strong>
+            </div>
+            <div class="score-card">
+              <span title="Jaccard overlap of proper nouns / named entities. Catches whether the model named the same people.">Entities</span>
+              <strong id="entityScore">-</strong>
+            </div>
           </div>
-          <div class="score-card">
-            <span>Length Match</span>
-            <strong id="lengthScore">-</strong>
+        </div>
+
+        <div class="score-section">
+          <h4 class="score-section-title">Style Fidelity</h4>
+          <div class="score-grid">
+            <div class="score-card">
+              <span title="Cosine-style similarity of the 9-dim stylometric vector vs the gold reply.">Style → Gold</span>
+              <strong id="styleGoldScore">-</strong>
+            </div>
+            <div class="score-card">
+              <span title="Style fingerprint similarity vs the user's average voice across all profile emails.">Style → User</span>
+              <strong id="styleUserScore">-</strong>
+            </div>
+            <div class="score-card">
+              <span title="Length ratio = min(len_pred, len_gold) / max(len_pred, len_gold).">Length</span>
+              <strong id="lengthScore">-</strong>
+            </div>
+            <div class="score-card">
+              <span title="Composite: average of content metrics + average of style metrics, harmonically combined.">Overall</span>
+              <strong id="overallScore">-</strong>
+            </div>
           </div>
-          <div class="score-card">
-            <span>Greeting</span>
-            <strong id="greetingScore">-</strong>
-          </div>
-          <div class="score-card">
-            <span>Sign-off</span>
-            <strong id="signoffScore">-</strong>
+        </div>
+
+        <div class="score-section">
+          <h4 class="score-section-title">Greeting &amp; Sign-off</h4>
+          <div class="score-grid bucket-grid">
+            <div class="score-card bucket-card">
+              <span>Greeting Type</span>
+              <strong id="greetingTypeScore">-</strong>
+              <small id="greetingTypeDetail" class="bucket-detail">-</small>
+            </div>
+            <div class="score-card bucket-card">
+              <span>Sign-off Type</span>
+              <strong id="signoffTypeScore">-</strong>
+              <small id="signoffTypeDetail" class="bucket-detail">-</small>
+            </div>
+            <div class="score-card">
+              <span title="Legacy: are greetings present-vs-absent the same in both?">Greeting (legacy)</span>
+              <strong id="greetingScore">-</strong>
+            </div>
+            <div class="score-card">
+              <span title="Legacy: are sign-offs present-vs-absent the same in both?">Sign-off (legacy)</span>
+              <strong id="signoffScore">-</strong>
+            </div>
           </div>
         </div>
 

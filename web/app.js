@@ -20,8 +20,21 @@ const els = {
   copyBtn: document.querySelector("#copyBtn"),
   testSelect: document.querySelector("#testSelect"),
   runTestBtn: document.querySelector("#runTestBtn"),
-  wordF1Score: document.querySelector("#wordF1Score"),
+  // Content fidelity
+  rouge1Score: document.querySelector("#rouge1Score"),
+  rougeLScore: document.querySelector("#rougeLScore"),
+  chrfScore: document.querySelector("#chrfScore"),
+  entityScore: document.querySelector("#entityScore"),
+  // Style fidelity
+  styleGoldScore: document.querySelector("#styleGoldScore"),
+  styleUserScore: document.querySelector("#styleUserScore"),
   lengthScore: document.querySelector("#lengthScore"),
+  overallScore: document.querySelector("#overallScore"),
+  // Greeting / sign-off buckets
+  greetingTypeScore: document.querySelector("#greetingTypeScore"),
+  greetingTypeDetail: document.querySelector("#greetingTypeDetail"),
+  signoffTypeScore: document.querySelector("#signoffTypeScore"),
+  signoffTypeDetail: document.querySelector("#signoffTypeDetail"),
   greetingScore: document.querySelector("#greetingScore"),
   signoffScore: document.querySelector("#signoffScore"),
   testMeta: document.querySelector("#testMeta"),
@@ -139,10 +152,48 @@ function getSelectedQuery(queryId = els.testSelect.value) {
 }
 
 function resetScores() {
-  els.wordF1Score.textContent = "-";
-  els.lengthScore.textContent = "-";
-  els.greetingScore.textContent = "-";
-  els.signoffScore.textContent = "-";
+  const dashIds = [
+    "rouge1Score", "rougeLScore", "chrfScore", "entityScore",
+    "styleGoldScore", "styleUserScore", "lengthScore", "overallScore",
+    "greetingTypeScore", "signoffTypeScore",
+    "greetingScore", "signoffScore",
+  ];
+  for (const id of dashIds) {
+    if (els[id]) els[id].textContent = "-";
+  }
+  if (els.greetingTypeDetail) els.greetingTypeDetail.textContent = "-";
+  if (els.signoffTypeDetail) els.signoffTypeDetail.textContent = "-";
+}
+
+function renderScores(scores) {
+  if (!scores) return resetScores();
+  // Content fidelity
+  els.rouge1Score.textContent = formatPercent(scores.rouge1);
+  els.rougeLScore.textContent = formatPercent(scores.rougeL);
+  els.chrfScore.textContent = formatPercent(scores.chrf);
+  els.entityScore.textContent = formatPercent(scores.entity_overlap);
+  // Style fidelity
+  els.styleGoldScore.textContent = formatPercent(scores.style_to_gold);
+  els.styleUserScore.textContent = formatPercent(scores.style_to_user);
+  els.lengthScore.textContent = formatPercent(scores.length_ratio);
+  els.overallScore.textContent = formatPercent(
+    harmonicMean(scores.content_score, scores.style_score)
+  );
+  // Greeting / sign-off bucket
+  els.greetingTypeScore.textContent = formatMatch(scores.greeting_type_match);
+  els.greetingTypeDetail.textContent =
+    `pred: ${scores.greeting_type_pred ?? "-"} · gold: ${scores.greeting_type_gold ?? "-"}`;
+  els.signoffTypeScore.textContent = formatMatch(scores.signoff_type_match);
+  els.signoffTypeDetail.textContent =
+    `pred: ${scores.signoff_type_pred ?? "-"} · gold: ${scores.signoff_type_gold ?? "-"}`;
+  // Legacy boolean cards (kept for back-compat / cross-check)
+  els.greetingScore.textContent = formatMatch(scores.greeting_match);
+  els.signoffScore.textContent = formatMatch(scores.signoff_match);
+}
+
+function harmonicMean(a, b) {
+  if (a == null || b == null || a + b === 0) return null;
+  return (2 * a * b) / (a + b);
 }
 
 function formatPercent(value) {
@@ -181,10 +232,7 @@ async function runSelectedTest() {
     els.incomingText.textContent = payload.query.input;
     els.actualText.textContent = payload.actual;
     els.generatedTestText.textContent = payload.generated;
-    els.wordF1Score.textContent = formatPercent(payload.scores.word_f1);
-    els.lengthScore.textContent = formatPercent(payload.scores.length_ratio);
-    els.greetingScore.textContent = formatMatch(payload.scores.greeting_match);
-    els.signoffScore.textContent = formatMatch(payload.scores.signoff_match);
+    renderScores(payload.scores);
     els.testState.textContent = payload.used_ollama ? `generated with ${payload.model}` : "generated with fallback";
   } catch (error) {
     els.generatedTestText.textContent = error.message;

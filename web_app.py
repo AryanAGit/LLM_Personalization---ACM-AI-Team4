@@ -115,7 +115,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
                 model=model,
                 identity=selected.get("inferred_name", ""),
             )
-            scores = score_prediction(output, query["gold"])
+            scores = score_prediction(output, query["gold"], profile=selected["profile"])
         except Exception as exc:
             self.send_json({"error": str(exc)}, status=500)
             return

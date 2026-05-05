@@ -329,11 +329,37 @@ textarea {
   opacity: 0.7;
 }
 
+.score-section {
+  margin-bottom: 14px;
+}
+
+.score-section-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
 .score-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
+}
+
+.bucket-card {
+  min-height: 96px;
+}
+
+.bucket-detail {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.3;
+  word-break: break-word;
 }
 
 .score-card {

@@ -3,7 +3,6 @@ __pycache__/
 .DS_Store
 
 # Local generated data and model artifacts
-data/
 
 # Local secrets / environment files
 .env

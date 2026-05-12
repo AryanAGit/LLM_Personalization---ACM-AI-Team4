@@ -9,6 +9,7 @@ df = pd.read_csv(
 
 
 df = df[~df['Tweet Text'].str.contains(r'https?://', na=False, regex=True)][['Tweet Text']]
+df = df[~df['Tweet Text'].str.contains(r'RT @', na=False, regex=True)][['Tweet Text']]
 df = df.head(1500)
 
 data = [{"prompt": "", "output": text} for text in df['Tweet Text'].dropna()]

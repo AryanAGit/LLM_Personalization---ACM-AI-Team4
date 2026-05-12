@@ -7,13 +7,11 @@ from pathlib import Path
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
-from enron_style import generate_style_response, load_history, score_prediction
-
+from enron_style import generate_style_response
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-DEFAULT_HISTORY = ROOT / "data" / "processed" / "user_email_history.json"
-DEFAULT_PROFILES = ROOT / "data" / "processed" / "profile_user.json"
+DEFAULT_HISTORY = ROOT / "trump_data" / "trump_tweets.jsonl"
 
 
 class ReusableThreadingHTTPServer(ThreadingHTTPServer):
@@ -22,7 +20,7 @@ class ReusableThreadingHTTPServer(ThreadingHTTPServer):
 
 class StyleLabHandler(BaseHTTPRequestHandler):
     histories = []
-    profiles_by_id = {}
+    queries = []
     model = "llama3.1:8b"
 
     def do_GET(self) -> None:
@@ -49,7 +47,6 @@ class StyleLabHandler(BaseHTTPRequestHandler):
         try:
             payload = self.read_json()
             prompt = str(payload.get("prompt", "")).strip()
-            user_id = int(payload.get("user_id") or self.histories[0]["user_id"])
             use_ollama = bool(payload.get("use_ollama", True))
             model = str(payload.get("model") or self.model)
         except (ValueError, IndexError, KeyError, json.JSONDecodeError) as exc:
@@ -60,18 +57,13 @@ class StyleLabHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "Prompt is required."}, status=400)
             return
 
-        selected = self.find_user(user_id)
-        if not selected:
-            self.send_json({"error": f"Unknown user_id: {user_id}"}, status=404)
-            return
-
         try:
             output = generate_style_response(
-                profile=selected["profile"],
+                profile=[],
                 prompt=prompt,
                 use_ollama=use_ollama,
                 model=model,
-                identity=selected.get("inferred_name", ""),
+                identity="Donald Trump",
             )
         except Exception as exc:
             self.send_json({"error": str(exc)}, status=500)
@@ -80,7 +72,6 @@ class StyleLabHandler(BaseHTTPRequestHandler):
         self.send_json(
             {
                 "output": output,
-                "user": self.serialize_user(selected),
                 "model": model,
                 "used_ollama": use_ollama,
             }
@@ -89,7 +80,6 @@ class StyleLabHandler(BaseHTTPRequestHandler):
     def handle_test(self) -> None:
         try:
             payload = self.read_json()
-            user_id = int(payload.get("user_id") or self.histories[0]["user_id"])
             query_id = str(payload.get("query_id", "")).strip()
             use_ollama = bool(payload.get("use_ollama", True))
             model = str(payload.get("model") or self.model)
@@ -97,25 +87,21 @@ class StyleLabHandler(BaseHTTPRequestHandler):
             self.send_json({"error": f"Invalid request: {exc}"}, status=400)
             return
 
-        selected = self.find_user(user_id)
-        if not selected:
-            self.send_json({"error": f"Unknown user_id: {user_id}"}, status=404)
-            return
-
-        query = self.find_query(selected, query_id)
+        query = self.find_query(query_id)
         if not query:
             self.send_json({"error": f"Unknown query_id: {query_id}"}, status=404)
             return
 
         try:
             output = generate_style_response(
-                profile=selected["profile"],
+                profile=[],
                 prompt=query["input"],
                 use_ollama=use_ollama,
                 model=model,
-                identity=selected.get("inferred_name", ""),
+                identity="Donald Trump",
             )
-            scores = score_prediction(output, query["gold"], profile=selected["profile"])
+            # Remove score_prediction entirely since personalization/scoring is removed
+            scores = {}
         except Exception as exc:
             self.send_json({"error": str(exc)}, status=500)
             return
@@ -126,45 +112,38 @@ class StyleLabHandler(BaseHTTPRequestHandler):
                 "generated": output,
                 "actual": query["gold"],
                 "scores": scores,
-                "user": self.serialize_user(selected),
                 "model": model,
                 "used_ollama": use_ollama,
             }
         )
 
-    def find_user(self, user_id: int) -> Optional[dict]:
-        return next((item for item in self.histories if item["user_id"] == user_id), None)
-
-    def find_query(self, history: dict, query_id: str) -> Optional[dict]:
-        queries = history.get("query", [])
-        if not query_id and queries:
-            return queries[0]
-        return next((item for item in queries if item["id"] == query_id), None)
+    def find_query(self, query_id: str) -> Optional[dict]:
+        if not query_id and self.queries:
+            return self.queries[0]
+        return next((item for item in self.queries if item["id"] == query_id), None)
 
     def serialize_query(self, query: dict) -> dict:
         return {
             "id": query["id"],
             "input": query["input"],
             "gold": query["gold"],
-            "subject": extract_subject_from_input(query["input"]),
-            "has_context": "Incoming email:" in query["input"],
+            "subject": query["input"][:50] + "...",
+            "has_context": False,
             "gold_word_count": len(query["gold"].split()),
         }
 
     def serialize_users(self) -> list:
-        return [self.serialize_user(history) for history in self.histories]
-
-    def serialize_user(self, history: dict) -> dict:
-        user_id = history["user_id"]
-        return {
-            "user_id": user_id,
-            "source_user": history.get("source_user", ""),
-            "inferred_name": history.get("inferred_name", ""),
-            "profile_count": len(history.get("profile", [])),
-            "query_count": len(history.get("query", [])),
-            "style": self.profiles_by_id.get(user_id, ""),
-            "queries": [self.serialize_query(query) for query in history.get("query", [])],
-        }
+        # We only have one user: Donald Trump
+        return [{
+            "user_id": 1,
+            "source_user": "realDonaldTrump",
+            "inferred_name": "Donald Trump",
+            "profile_count": 0,
+            "query_count": len(self.queries),
+            "base_model": self.model,
+            "style": "",
+            "queries": [self.serialize_query(query) for query in self.queries],
+        }]
 
     def read_json(self) -> dict:
         length = int(self.headers.get("content-length", "0"))
@@ -201,22 +180,21 @@ class StyleLabHandler(BaseHTTPRequestHandler):
         print(f"{self.address_string()} - {format % args}")
 
 
-def load_profiles(path: Path) -> dict:
+def load_trump_history(path: Path) -> list:
     if not path.exists():
-        return {}
+        return []
+    
+    queries = []
     with path.open("r", encoding="utf-8") as handle:
-        profiles = json.load(handle)
-    return {item["id"]: item.get("output", "") for item in profiles}
-
-
-def extract_subject_from_input(text: str) -> str:
-    for line in text.splitlines():
-        if line.lower().startswith("subject:"):
-            return line.split(":", 1)[1].strip() or "(no subject)"
-    marker = "for this subject:"
-    if marker in text:
-        return text.split(marker, 1)[1].strip() or "(no subject)"
-    return "(no subject)"
+        for idx, line in enumerate(handle):
+            if not line.strip(): continue
+            data = json.loads(line)
+            queries.append({
+                "id": str(idx),
+                "input": data.get("prompt", ""),
+                "gold": data.get("response", "")
+            })
+    return queries
 
 
 def main() -> None:
@@ -224,7 +202,6 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8787)
     parser.add_argument("--history", default=str(DEFAULT_HISTORY))
-    parser.add_argument("--profiles", default=str(DEFAULT_PROFILES))
     parser.add_argument("--model", default="llama3.1:8b")
     parser.add_argument(
         "--open",
@@ -237,8 +214,7 @@ def main() -> None:
     if not history_path.exists():
         raise FileNotFoundError(f"Missing history JSON: {history_path}")
 
-    StyleLabHandler.histories = load_history(history_path)
-    StyleLabHandler.profiles_by_id = load_profiles(Path(args.profiles))
+    StyleLabHandler.queries = load_trump_history(history_path)
     StyleLabHandler.model = args.model
 
     server, port = create_server(args.host, args.port)

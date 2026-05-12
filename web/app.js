@@ -10,6 +10,7 @@ const els = {
   mailboxStat: document.querySelector("#mailboxStat"),
   profileStat: document.querySelector("#profileStat"),
   queryStat: document.querySelector("#queryStat"),
+  baseModelStat: document.querySelector("#baseModelStat"),
   styleText: document.querySelector("#styleText"),
   promptInput: document.querySelector("#promptInput"),
   modelInput: document.querySelector("#modelInput"),
@@ -73,6 +74,7 @@ function selectUser(userId) {
   els.mailboxStat.textContent = state.selectedUser.source_user || "-";
   els.profileStat.textContent = `${state.selectedUser.profile_count} emails`;
   els.queryStat.textContent = `${state.selectedUser.query_count} checks`;
+  els.baseModelStat.textContent = state.selectedUser.base_model || "-";
   els.styleText.textContent = state.selectedUser.style || "No style profile found.";
   populateTests();
 }

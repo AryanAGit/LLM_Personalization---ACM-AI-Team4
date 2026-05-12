@@ -311,45 +311,39 @@ def generate_style_response(
     top_k: int = 8,
     identity: str = "",
 ) -> str:
-    retrieved = retrieve_profile_examples(profile, prompt, top_k=top_k)
-    style_hint = describe_style_heuristic(
-        [
-            EmailRecord(
-                id=item["id"],
-                user_name="profile",
-                subject=item.get("subject", ""),
-                body=item.get("body", ""),
-            )
-            for item in profile
-        ]
-    )
-    identity = identity or infer_profile_identity(profile)
-    fingerprint = build_style_fingerprint(profile)
-
-    if use_ollama:
-        try:
-            from ollama import chat
-
-            messages = build_generation_messages(
-                prompt=prompt,
-                style_hint=style_hint,
-                fingerprint=fingerprint,
-                identity=identity,
-                examples=retrieved,
-            )
-            response = chat(
-                model=model,
-                messages=messages,
-                options={"temperature": 0.2, "top_p": 0.9},
-            )
-            content = getattr(getattr(response, "message", None), "content", None)
-            if content:
-                return clean_model_response(str(content), identity=identity, prompt=prompt)
-        except Exception as exc:
-            raise RuntimeError(f"Ollama generation failed: {exc}") from exc
-
-    return heuristic_response(prompt, retrieved, style_hint, identity=identity)
-
+    # Use HuggingFace model specified
+    if model != "alchin2/lora-project":
+        model = "alchin2/lora-project"
+    
+    try:
+        from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
+        from peft import PeftModel
+        
+        # Load the base model and tokenizer
+        base_model_name = "Qwen/Qwen2.5-1.5B-Instruct"
+        base_model = AutoModelForCausalLM.from_pretrained(base_model_name)
+        tokenizer = AutoTokenizer.from_pretrained(base_model_name)
+        
+        # Load the adapter
+        hf_model = PeftModel.from_pretrained(base_model, model, subfolder="trump")
+        
+        # Load the model directly
+        generator = pipeline("text-generation", model=hf_model, tokenizer=tokenizer)
+        
+        # Formatting exactly as in the dataset: "Prompt:\n{prompt}\n\nOutput:\n"
+        formatted_prompt = f"Prompt:\n{prompt}\n\nOutput:\n"
+        
+        result = generator(
+            formatted_prompt, 
+            max_new_tokens=150, 
+            return_full_text=False,
+            do_sample=True,
+            temperature=0.7
+        )
+        output = result[0]['generated_text']
+        return output.strip()
+    except Exception as exc:
+        raise RuntimeError(f"HuggingFace generation failed: {exc}") from exc
 
 def build_generation_messages(
     prompt: str,

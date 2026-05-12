@@ -66,10 +66,20 @@ h1 {
   color: var(--muted);
 }
 
-.model-box {
+.model-grid {
+  display: grid;
+  grid-template-columns: 170px minmax(260px, 1fr);
+  gap: 8px 10px;
+  width: min(620px, 52vw);
+}
+
+.model-grid div {
   display: grid;
   gap: 6px;
-  width: 220px;
+}
+
+.model-grid div:nth-child(3) {
+  grid-column: 1 / -1;
 }
 
 label {
@@ -93,6 +103,12 @@ input,
 select {
   height: 42px;
   padding: 0 12px;
+}
+
+input:disabled {
+  color: var(--muted);
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 input:focus,
@@ -186,16 +202,10 @@ textarea:focus {
   gap: 12px;
 }
 
-.toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.toggle-row input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--teal);
+#backendLabel {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 textarea {
@@ -464,8 +474,9 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .model-box {
+  .model-grid {
     width: 100%;
+    grid-template-columns: 1fr;
   }
 
   .composer {

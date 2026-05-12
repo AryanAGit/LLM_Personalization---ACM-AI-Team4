@@ -12,8 +12,12 @@ const els = {
   queryStat: document.querySelector("#queryStat"),
   styleText: document.querySelector("#styleText"),
   promptInput: document.querySelector("#promptInput"),
+  backendSelect: document.querySelector("#backendSelect"),
+  backendLabel: document.querySelector("#backendLabel"),
   modelInput: document.querySelector("#modelInput"),
-  ollamaToggle: document.querySelector("#ollamaToggle"),
+  baseModelInput: document.querySelector("#baseModelInput"),
+  adapterInput: document.querySelector("#adapterInput"),
+  adapterRootInput: document.querySelector("#adapterRootInput"),
   generateBtn: document.querySelector("#generateBtn"),
   runState: document.querySelector("#runState"),
   resultText: document.querySelector("#resultText"),
@@ -22,14 +26,48 @@ const els = {
   runTestBtn: document.querySelector("#runTestBtn"),
   wordF1Score: document.querySelector("#wordF1Score"),
   lengthScore: document.querySelector("#lengthScore"),
-  greetingScore: document.querySelector("#greetingScore"),
-  signoffScore: document.querySelector("#signoffScore"),
+  copyScore: document.querySelector("#copyScore"),
+  styleDistanceScore: document.querySelector("#styleDistanceScore"),
   testMeta: document.querySelector("#testMeta"),
   incomingText: document.querySelector("#incomingText"),
   actualText: document.querySelector("#actualText"),
   generatedTestText: document.querySelector("#generatedTestText"),
   testState: document.querySelector("#testState"),
 };
+
+function selectedBackend() {
+  return els.backendSelect.value || "ollama";
+}
+
+function statusForBackend(prefix) {
+  const backend = selectedBackend();
+  if (backend === "ollama") return `${prefix} Ollama RAG...`;
+  if (backend === "peft") return `${prefix} LoRA...`;
+  return "Using template fallback...";
+}
+
+function generationLabel(payload) {
+  if (payload.warning) return payload.warning;
+  const backend = payload.backend || (payload.used_ollama ? "ollama" : "fallback");
+  if (backend === "ollama") return `Generated with Ollama RAG ${payload.model}`;
+  if (backend === "peft") {
+    const adapter = payload.adapter_path
+      ? ` + ${payload.adapter_path}`
+      : ` + ${payload.adapter_root || "per-user adapter root"}`;
+    return `Generated with LoRA ${payload.base_model || ""}${adapter}`.trim();
+  }
+  return "Generated with template fallback";
+}
+
+function updateBackendUi() {
+  const backend = selectedBackend();
+  const labels = { fallback: "Template Fallback", ollama: "Ollama RAG", peft: "LoRA" };
+  els.backendLabel.textContent = labels[backend] || "Ollama RAG";
+  els.modelInput.disabled = backend !== "ollama";
+  els.baseModelInput.disabled = backend !== "peft";
+  els.adapterInput.disabled = backend !== "peft";
+  els.adapterRootInput.disabled = backend !== "peft";
+}
 
 async function loadUsers() {
   const response = await fetch("/api/users");
@@ -46,9 +84,9 @@ async function loadUsers() {
 
   if (state.users.length) {
     selectUser(state.users[0].user_id);
-    els.statusText.textContent = `${state.users.length} users loaded from processed Enron data`;
+    els.statusText.textContent = `${state.users.length} voice loaded from local corpus data`;
   } else {
-    els.statusText.textContent = "No users found";
+    els.statusText.textContent = "No voices found";
   }
 }
 
@@ -58,7 +96,7 @@ function selectUser(userId) {
 
   els.nameStat.textContent = state.selectedUser.inferred_name || "-";
   els.mailboxStat.textContent = state.selectedUser.source_user || "-";
-  els.profileStat.textContent = `${state.selectedUser.profile_count} emails`;
+  els.profileStat.textContent = `${state.selectedUser.profile_count} passages`;
   els.queryStat.textContent = `${state.selectedUser.query_count} checks`;
   els.styleText.textContent = state.selectedUser.style || "No style profile found.";
   populateTests();
@@ -73,7 +111,7 @@ async function generate() {
   }
 
   els.generateBtn.disabled = true;
-  els.runState.textContent = els.ollamaToggle.checked ? "Calling Llama..." : "Using fallback...";
+  els.runState.textContent = statusForBackend("Calling");
   els.resultText.classList.remove("error");
 
   try {
@@ -84,14 +122,18 @@ async function generate() {
         user_id: state.selectedUser?.user_id,
         prompt,
         model: els.modelInput.value.trim() || "llama3.1:8b",
-        use_ollama: els.ollamaToggle.checked,
+        backend: selectedBackend(),
+        use_ollama: selectedBackend() === "ollama",
+        base_model: els.baseModelInput.value.trim() || "Qwen/Qwen2.5-1.5B-Instruct",
+        adapter_path: els.adapterInput.value.trim(),
+        adapter_root: els.adapterRootInput.value.trim() || "data/lora_adapters",
       }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Generation failed.");
 
     els.resultText.textContent = payload.output;
-    els.runState.textContent = payload.used_ollama ? `Generated with ${payload.model}` : "Generated with fallback";
+    els.runState.textContent = generationLabel(payload);
   } catch (error) {
     els.resultText.textContent = error.message;
     els.resultText.classList.add("error");
@@ -115,7 +157,7 @@ function populateTests() {
   if (queries.length) {
     selectTest(queries[0].id);
   } else {
-    els.incomingText.textContent = "No held-out tests found for this user.";
+    els.incomingText.textContent = "No held-out tests found for this voice.";
     els.actualText.textContent = "-";
     els.generatedTestText.textContent = "-";
     resetScores();
@@ -129,7 +171,7 @@ function selectTest(queryId) {
   els.incomingText.textContent = query.input;
   els.actualText.textContent = query.gold;
   els.generatedTestText.textContent = "Run this test to generate a comparison.";
-  els.testMeta.textContent = `${query.has_context ? "context" : "subject only"} · ${query.gold_word_count} gold words`;
+  els.testMeta.textContent = `${query.subject} · ${query.gold_word_count} source words`;
   els.testState.textContent = "not run";
   resetScores();
 }
@@ -141,8 +183,8 @@ function getSelectedQuery(queryId = els.testSelect.value) {
 function resetScores() {
   els.wordF1Score.textContent = "-";
   els.lengthScore.textContent = "-";
-  els.greetingScore.textContent = "-";
-  els.signoffScore.textContent = "-";
+  els.copyScore.textContent = "-";
+  els.styleDistanceScore.textContent = "-";
 }
 
 function formatPercent(value) {
@@ -150,9 +192,9 @@ function formatPercent(value) {
   return `${Math.round(Number(value) * 100)}%`;
 }
 
-function formatMatch(value) {
+function formatDecimal(value) {
   if (value === undefined || value === null) return "-";
-  return Number(value) >= 1 ? "match" : "miss";
+  return Number(value).toFixed(2);
 }
 
 async function runSelectedTest() {
@@ -160,7 +202,7 @@ async function runSelectedTest() {
   if (!query) return;
 
   els.runTestBtn.disabled = true;
-  els.testState.textContent = els.ollamaToggle.checked ? "calling Llama..." : "fallback...";
+  els.testState.textContent = statusForBackend("calling").toLowerCase();
   els.generatedTestText.classList.remove("error");
   resetScores();
 
@@ -172,7 +214,11 @@ async function runSelectedTest() {
         user_id: state.selectedUser?.user_id,
         query_id: query.id,
         model: els.modelInput.value.trim() || "llama3.1:8b",
-        use_ollama: els.ollamaToggle.checked,
+        backend: selectedBackend(),
+        use_ollama: selectedBackend() === "ollama",
+        base_model: els.baseModelInput.value.trim() || "Qwen/Qwen2.5-1.5B-Instruct",
+        adapter_path: els.adapterInput.value.trim(),
+        adapter_root: els.adapterRootInput.value.trim() || "data/lora_adapters",
       }),
     });
     const payload = await response.json();
@@ -183,9 +229,9 @@ async function runSelectedTest() {
     els.generatedTestText.textContent = payload.generated;
     els.wordF1Score.textContent = formatPercent(payload.scores.word_f1);
     els.lengthScore.textContent = formatPercent(payload.scores.length_ratio);
-    els.greetingScore.textContent = formatMatch(payload.scores.greeting_match);
-    els.signoffScore.textContent = formatMatch(payload.scores.signoff_match);
-    els.testState.textContent = payload.used_ollama ? `generated with ${payload.model}` : "generated with fallback";
+    els.copyScore.textContent = formatPercent(payload.scores.profile_copy_5gram_rate);
+    els.styleDistanceScore.textContent = formatDecimal(payload.scores.style_distance);
+    els.testState.textContent = generationLabel(payload).toLowerCase();
   } catch (error) {
     els.generatedTestText.textContent = error.message;
     els.generatedTestText.classList.add("error");
@@ -196,6 +242,7 @@ async function runSelectedTest() {
 }
 
 els.userSelect.addEventListener("change", (event) => selectUser(event.target.value));
+els.backendSelect.addEventListener("change", updateBackendUi);
 els.generateBtn.addEventListener("click", generate);
 els.testSelect.addEventListener("change", (event) => selectTest(event.target.value));
 els.runTestBtn.addEventListener("click", runSelectedTest);
@@ -217,6 +264,7 @@ els.copyBtn.addEventListener("click", async () => {
   els.runState.textContent = "Copied";
 });
 
+updateBackendUi();
 loadUsers().catch((error) => {
   els.statusText.textContent = "Could not load users";
   els.resultText.textContent = error.message;

@@ -3,25 +3,47 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Enron Style Lab</title>
+    <title>Historical Voice Lab</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
         <div>
-          <h1>Enron Style Lab</h1>
-          <p id="statusText">Loading users...</p>
+          <h1>Historical Voice Lab</h1>
+          <p id="statusText">Loading voices...</p>
         </div>
-        <div class="model-box">
-          <label for="modelInput">Model</label>
-          <input id="modelInput" value="llama3.1:8b" autocomplete="off" />
+        <div class="model-grid">
+          <div>
+            <label for="backendSelect">Backend</label>
+            <select id="backendSelect">
+              <option value="ollama" selected>Ollama RAG</option>
+              <option value="fallback">Template Fallback</option>
+              <option value="peft">LoRA</option>
+            </select>
+          </div>
+          <div>
+            <label for="modelInput">Ollama</label>
+            <input id="modelInput" value="llama3.1:8b" autocomplete="off" />
+          </div>
+          <div>
+            <label for="baseModelInput">HF Base</label>
+            <input id="baseModelInput" value="Qwen/Qwen2.5-1.5B-Instruct" autocomplete="off" />
+          </div>
+          <div>
+            <label for="adapterInput">Adapter</label>
+            <input id="adapterInput" value="" autocomplete="off" />
+          </div>
+          <div>
+            <label for="adapterRootInput">Adapter Root</label>
+            <input id="adapterRootInput" value="data/lora_adapters" autocomplete="off" />
+          </div>
         </div>
       </header>
 
       <section class="workspace">
         <aside class="side-panel">
-          <label for="userSelect">User</label>
+          <label for="userSelect">Voice</label>
           <select id="userSelect"></select>
 
           <div class="user-stat-grid">
@@ -30,7 +52,7 @@
               <strong id="nameStat">-</strong>
             </div>
             <div>
-              <span>Mailbox</span>
+              <span>Source</span>
               <strong id="mailboxStat">-</strong>
             </div>
             <div>
@@ -38,13 +60,13 @@
               <strong id="profileStat">-</strong>
             </div>
             <div>
-              <span>Queries</span>
+              <span>Held-out</span>
               <strong id="queryStat">-</strong>
             </div>
           </div>
 
           <div class="style-panel">
-            <h2>Style</h2>
+            <h2>Voice Profile</h2>
             <p id="styleText"></p>
           </div>
         </aside>
@@ -52,34 +74,31 @@
         <section class="composer">
           <div class="prompt-row">
             <label for="promptInput">Prompt</label>
-            <div class="toggle-row">
-              <input id="ollamaToggle" type="checkbox" checked />
-              <label for="ollamaToggle">Llama</label>
-            </div>
+            <span id="backendLabel">Ollama RAG</span>
           </div>
-          <textarea id="promptInput" spellcheck="true">Write me an email to Wendy telling her we need to get these files in by Wednesday.</textarea>
+          <textarea id="promptInput" spellcheck="true">Write a short note encouraging a team to finish their reports by Friday.</textarea>
 
           <div class="sample-row" aria-label="Prompt samples">
-            <button type="button" class="sample-btn" data-prompt="Hi, my name is Sarah. What's your name?">Intro</button>
-            <button type="button" class="sample-btn" data-prompt="Write a reply to Sarah: Can we reschedule Friday's call to Monday morning?">Schedule</button>
-            <button type="button" class="sample-btn" data-prompt="Write me an email to Wendy telling her we need to get these files in by Wednesday.">Deadline</button>
-            <button type="button" class="sample-btn" data-prompt="Write a reply to Alex: Please review the attached draft agreement when you have time.">Review</button>
+            <button type="button" class="sample-btn" data-prompt="Write a short note encouraging a team to finish their reports by Friday.">Encourage</button>
+            <button type="button" class="sample-btn" data-prompt="Write a brief public statement about why education matters.">Education</button>
+            <button type="button" class="sample-btn" data-prompt="Write a short appeal asking neighbors to remain patient during a difficult week.">Patience</button>
+            <button type="button" class="sample-btn" data-prompt="Write a paragraph explaining why fairness is necessary in public life.">Fairness</button>
           </div>
 
           <div class="action-row">
             <button type="button" id="generateBtn">
               <span class="btn-icon">↗</span>
-              Generate
+              Generate Passage
             </button>
             <span id="runState"></span>
           </div>
 
           <section class="result-panel" aria-live="polite">
             <div class="result-header">
-              <h2>Response</h2>
+              <h2>Generated Passage</h2>
               <button type="button" id="copyBtn" title="Copy response">⧉</button>
             </div>
-            <pre id="resultText">Generated replies will appear here.</pre>
+            <pre id="resultText">Generated passages will appear here.</pre>
           </section>
         </section>
       </section>
@@ -88,7 +107,7 @@
         <div class="bench-header">
           <div>
             <h2>Test Bench</h2>
-            <p>Compare Llama against real held-out replies from the selected user.</p>
+            <p>Compare generated passages against held-out source passages from the selected voice.</p>
           </div>
           <div class="bench-controls">
             <label for="testSelect">Example</label>
@@ -110,19 +129,19 @@
             <strong id="lengthScore">-</strong>
           </div>
           <div class="score-card">
-            <span>Greeting</span>
-            <strong id="greetingScore">-</strong>
+            <span>Copy Risk</span>
+            <strong id="copyScore">-</strong>
           </div>
           <div class="score-card">
-            <span>Sign-off</span>
-            <strong id="signoffScore">-</strong>
+            <span>Style Distance</span>
+            <strong id="styleDistanceScore">-</strong>
           </div>
         </div>
 
         <div class="comparison-grid">
           <section class="comparison-panel incoming-panel">
             <div class="panel-title">
-              <h3>Incoming Prompt</h3>
+            <h3>Prompt</h3>
               <span id="testMeta">-</span>
             </div>
             <pre id="incomingText">Choose an example and run a test.</pre>
@@ -130,7 +149,7 @@
 
           <section class="comparison-panel">
             <div class="panel-title">
-              <h3>Actual Response</h3>
+              <h3>Held-out Passage</h3>
               <span>gold</span>
             </div>
             <pre id="actualText">-</pre>
@@ -138,7 +157,7 @@
 
           <section class="comparison-panel">
             <div class="panel-title">
-              <h3>Llama Response</h3>
+              <h3>Generated Response</h3>
               <span id="testState">not run</span>
             </div>
             <pre id="generatedTestText">-</pre>

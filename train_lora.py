@@ -1,4 +1,5 @@
 import argparse
+import inspect
 import json
 from pathlib import Path
 
@@ -13,6 +14,14 @@ def main() -> None:
     parser.add_argument("--max-steps", type=int, default=30)
     parser.add_argument("--max-length", type=int, default=1536)
     parser.add_argument("--lr", type=float, default=2e-4)
+    parser.add_argument(
+        "--target-modules",
+        default="all-linear",
+        help="Comma-separated LoRA target modules, 'all-linear', or empty for inferred modules.",
+    )
+    parser.add_argument("--lora-r", type=int, default=8)
+    parser.add_argument("--lora-alpha", type=int, default=16)
+    parser.add_argument("--no-eval", action="store_true", help="Skip validation during training.")
     args = parser.parse_args()
 
     try:
@@ -32,23 +41,31 @@ def main() -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    dtype = torch.float16 if torch.cuda.is_available() or torch.backends.mps.is_available() else torch.float32
     model = AutoModelForCausalLM.from_pretrained(
         args.base_model,
-        torch_dtype=torch.float16 if torch.backends.mps.is_available() else torch.float32,
+        torch_dtype=dtype,
         cache_dir=str(cache_dir),
     )
-    target_modules = infer_lora_targets(model)
-    model = get_peft_model(
-        model,
-        LoraConfig(
-            r=8,
-            lora_alpha=16,
-            target_modules=target_modules,
-            lora_dropout=0.05,
-            bias="none",
-            task_type="CAUSAL_LM",
-        ),
+    if hasattr(model, "gradient_checkpointing_enable"):
+        model.gradient_checkpointing_enable()
+    target_modules = parse_target_modules(args.target_modules)
+    lora_config = LoraConfig(
+        r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        target_modules=target_modules or infer_lora_targets(model),
+        lora_dropout=0.05,
+        bias="none",
+        task_type="CAUSAL_LM",
     )
+    try:
+        model = get_peft_model(model, lora_config)
+    except Exception:
+        if target_modules == "all-linear":
+            lora_config.target_modules = infer_lora_targets(model)
+            model = get_peft_model(model, lora_config)
+        else:
+            raise
 
     dataset = load_dataset(
         "json",
@@ -57,30 +74,39 @@ def main() -> None:
     )
 
     def tokenize(row):
-        text = format_messages(tokenizer, row["messages"])
-        tokens = tokenizer(text, truncation=True, max_length=args.max_length, padding="max_length")
-        tokens["labels"] = tokens["input_ids"].copy()
+        prompt_text = format_messages(
+            tokenizer, row["messages"][:-1], add_generation_prompt=True
+        )
+        full_text = format_messages(tokenizer, row["messages"], add_generation_prompt=False)
+        full_ids = tokenizer(full_text, add_special_tokens=False)["input_ids"]
+        prompt_ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
+        overflow = max(0, len(full_ids) - args.max_length)
+        input_ids = full_ids[overflow:]
+        visible_prompt_length = max(0, len(prompt_ids) - overflow)
+        labels = input_ids.copy()
+        labels[: min(visible_prompt_length, len(labels))] = [-100] * min(
+            visible_prompt_length, len(labels)
+        )
+        attention_mask = [1] * len(input_ids)
+        pad_length = args.max_length - len(input_ids)
+        if pad_length > 0:
+            input_ids = input_ids + [tokenizer.pad_token_id] * pad_length
+            attention_mask = attention_mask + [0] * pad_length
+            labels = labels + [-100] * pad_length
+        tokens = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": labels,
+        }
         return tokens
 
     tokenized = dataset.map(tokenize, remove_columns=dataset["train"].column_names)
-    training_args = TrainingArguments(
-        output_dir=args.out,
-        max_steps=args.max_steps,
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=4,
-        learning_rate=args.lr,
-        logging_steps=1,
-        save_steps=max(args.max_steps, 1),
-        eval_strategy="steps",
-        eval_steps=max(args.max_steps // 2, 1),
-        report_to=[],
-        use_mps_device=torch.backends.mps.is_available(),
-    )
+    training_args = TrainingArguments(**build_training_args_kwargs(args, torch, TrainingArguments))
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=tokenized["train"],
-        eval_dataset=tokenized["validation"],
+        eval_dataset=None if args.no_eval else tokenized["validation"],
     )
     result = trainer.train()
     model.save_pretrained(args.out)
@@ -89,6 +115,33 @@ def main() -> None:
     Path(args.out).mkdir(parents=True, exist_ok=True)
     (Path(args.out) / "train_result.json").write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(metrics, indent=2))
+
+
+def parse_target_modules(value: str) -> list:
+    if value.strip().lower() == "all-linear":
+        return "all-linear"
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def build_training_args_kwargs(args, torch, training_args_cls) -> dict:
+    kwargs = {
+        "output_dir": args.out,
+        "max_steps": args.max_steps,
+        "per_device_train_batch_size": 1,
+        "gradient_accumulation_steps": 4,
+        "learning_rate": args.lr,
+        "logging_steps": 1,
+        "save_steps": max(args.max_steps, 1),
+        "eval_steps": max(args.max_steps // 2, 1),
+        "report_to": [],
+        "remove_unused_columns": False,
+    }
+    signature = inspect.signature(training_args_cls)
+    eval_key = "eval_strategy" if "eval_strategy" in signature.parameters else "evaluation_strategy"
+    kwargs[eval_key] = "no" if args.no_eval else "steps"
+    if "use_mps_device" in signature.parameters:
+        kwargs["use_mps_device"] = torch.backends.mps.is_available()
+    return kwargs
 
 
 def infer_lora_targets(model) -> list:
@@ -103,9 +156,11 @@ def infer_lora_targets(model) -> list:
     raise ValueError("Could not infer LoRA target modules for this base model.")
 
 
-def format_messages(tokenizer, messages: list) -> str:
+def format_messages(tokenizer, messages: list, add_generation_prompt: bool = False) -> str:
     if getattr(tokenizer, "chat_template", None):
-        return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+        return tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=add_generation_prompt
+        )
     return "\n\n".join(f"{message['role'].upper()}:\n{message['content']}" for message in messages)
 
 

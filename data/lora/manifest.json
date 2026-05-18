@@ -1,0 +1,52 @@
+{
+  "total": 680,
+  "query_rows": 25,
+  "profile_rows": 655,
+  "train": 675,
+  "val": 5,
+  "validation_source": "query",
+  "train_path": "data/lora/train.jsonl",
+  "val_path": "data/lora/val.jsonl",
+  "users": {
+    "20000001": {
+      "total": 185,
+      "train": 184,
+      "val": 1,
+      "train_path": "data/lora/users/20000001/train.jsonl",
+      "val_path": "data/lora/users/20000001/val.jsonl",
+      "recommended_adapter_path": "data/lora_adapters/20000001"
+    },
+    "20000002": {
+      "total": 185,
+      "train": 184,
+      "val": 1,
+      "train_path": "data/lora/users/20000002/train.jsonl",
+      "val_path": "data/lora/users/20000002/val.jsonl",
+      "recommended_adapter_path": "data/lora_adapters/20000002"
+    },
+    "20000003": {
+      "total": 185,
+      "train": 184,
+      "val": 1,
+      "train_path": "data/lora/users/20000003/train.jsonl",
+      "val_path": "data/lora/users/20000003/val.jsonl",
+      "recommended_adapter_path": "data/lora_adapters/20000003"
+    },
+    "20000004": {
+      "total": 107,
+      "train": 106,
+      "val": 1,
+      "train_path": "data/lora/users/20000004/train.jsonl",
+      "val_path": "data/lora/users/20000004/val.jsonl",
+      "recommended_adapter_path": "data/lora_adapters/20000004"
+    },
+    "20000005": {
+      "total": 18,
+      "train": 17,
+      "val": 1,
+      "train_path": "data/lora/users/20000005/train.jsonl",
+      "val_path": "data/lora/users/20000005/val.jsonl",
+      "recommended_adapter_path": "data/lora_adapters/20000005"
+    }
+  }
+}

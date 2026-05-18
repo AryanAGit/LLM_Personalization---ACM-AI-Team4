@@ -74,7 +74,8 @@ def load_peft_pipeline(base_model: str, adapter_path: str = ""):
     model = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=dtype, cache_dir=DEFAULT_CACHE_DIR)
     adapter_path = str(Path(adapter_path).expanduser()) if adapter_path else ""
     if adapter_path:
-        if not Path(adapter_path).exists():
+        is_hub_repo_id = "/" in adapter_path and not adapter_path.startswith(("/", "~", "."))
+        if not Path(adapter_path).exists() and not is_hub_repo_id:
             raise FileNotFoundError(f"LoRA adapter path does not exist: {adapter_path}")
         model = PeftModel.from_pretrained(model, adapter_path)
 

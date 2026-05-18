@@ -557,7 +557,12 @@ def is_freeform_email_instruction(prompt: str) -> bool:
     lower = prompt.lower()
     if "incoming email:" in lower or "subject:" in lower:
         return False
-    return bool(re.search(r"\bwrite (?:me )?an email to\b|\btelling (?:him|her|them)\b", lower))
+    return bool(
+        re.search(
+            r"\bwrite (?:me )?an email (?:to|asking|telling)\b|\btelling (?:him|her|them)\b",
+            lower,
+        )
+    )
 
 
 def is_author_style_prompt(prompt: str) -> bool:

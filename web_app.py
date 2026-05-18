@@ -20,7 +20,7 @@ from enron_style import (
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-DEFAULT_HISTORY = ROOT / "data" / "authors" / "lincoln" / "user_email_history.json"
+DEFAULT_HISTORY = ROOT / "data" / "processed" / "user_email_history.json"
 DEFAULT_PROFILES = ROOT / "data" / "processed" / "profile_user.json"
 
 

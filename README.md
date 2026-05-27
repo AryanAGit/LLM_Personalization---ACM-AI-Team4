@@ -86,6 +86,19 @@ Open `http://127.0.0.1:8787`. The page includes a prompt composer, backend selec
 
 The web app defaults to generated files in `data/processed` when they exist locally. Fresh clones that do not have local generated data automatically use the checked-in demo JSON files, so `python3 run_app.py` is enough to launch the frontend.
 
+### Frontend Handoff
+
+The frontend is intentionally runnable before the custom model, eval pipeline, or final data pipeline are connected. Teammates can treat `web/` as the UI layer and `web_app.py` as the temporary local API shim.
+
+Integration points:
+
+- `GET /api/users` returns the voice list, style profile text, and held-out examples used by the selector/sidebar/test bench.
+- `POST /api/generate` powers the main generated passage panel. Connect the custom model here when weights are ready.
+- `POST /api/compare` powers the Base / LoRA comparison panel. Connect base-model and adapter outputs here.
+- `POST /api/test` powers the Test Bench. Connect eval/stat outputs here as metrics stabilize.
+
+Until those pieces are connected, the template fallback keeps the website usable for demos and frontend work.
+
 ## LoRA And RAG Direction
 
 Use the generated JSON as supervised fine-tuning data by converting each query into an instruction/output pair where the instruction includes the style profile plus retrieved examples, and the output is the held-out gold email. The intended split of responsibility is:

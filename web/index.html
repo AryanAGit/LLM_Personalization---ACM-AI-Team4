@@ -17,8 +17,8 @@
           <div>
             <label for="backendSelect">Backend</label>
             <select id="backendSelect">
-              <option value="ollama" selected>Ollama RAG</option>
-              <option value="fallback">Template Fallback</option>
+              <option value="fallback" selected>Template Fallback</option>
+              <option value="ollama">Ollama RAG</option>
               <option value="peft">LoRA</option>
             </select>
           </div>
@@ -90,6 +90,10 @@
               <span class="btn-icon">↗</span>
               Generate Passage
             </button>
+            <button type="button" id="compareBtn">
+              <span class="btn-icon">⇄</span>
+              Compare Base / LoRA
+            </button>
             <span id="runState"></span>
           </div>
 
@@ -99,6 +103,23 @@
               <button type="button" id="copyBtn" title="Copy response">⧉</button>
             </div>
             <pre id="resultText">Generated passages will appear here.</pre>
+          </section>
+
+          <section class="compare-panel" aria-live="polite">
+            <div class="result-header">
+              <h2>Base / LoRA Comparison</h2>
+              <span id="compareState">not run</span>
+            </div>
+            <div class="compare-grid">
+              <div>
+                <div class="compare-title">Base model</div>
+                <pre id="baseCompareText">Run a comparison to see the base response.</pre>
+              </div>
+              <div>
+                <div class="compare-title">LoRA adapter</div>
+                <pre id="loraCompareText">Run a comparison to see the adapted response.</pre>
+              </div>
+            </div>
           </section>
         </section>
       </section>

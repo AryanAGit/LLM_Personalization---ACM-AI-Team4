@@ -19,8 +19,12 @@ const els = {
   adapterInput: document.querySelector("#adapterInput"),
   adapterRootInput: document.querySelector("#adapterRootInput"),
   generateBtn: document.querySelector("#generateBtn"),
+  compareBtn: document.querySelector("#compareBtn"),
   runState: document.querySelector("#runState"),
   resultText: document.querySelector("#resultText"),
+  compareState: document.querySelector("#compareState"),
+  baseCompareText: document.querySelector("#baseCompareText"),
+  loraCompareText: document.querySelector("#loraCompareText"),
   copyBtn: document.querySelector("#copyBtn"),
   testSelect: document.querySelector("#testSelect"),
   runTestBtn: document.querySelector("#runTestBtn"),
@@ -143,6 +147,49 @@ async function generate() {
   }
 }
 
+async function compareBaseAndLora() {
+  const prompt = els.promptInput.value.trim();
+  if (!prompt) {
+    els.resultText.textContent = "Type a prompt first.";
+    els.resultText.classList.add("error");
+    return;
+  }
+
+  els.compareBtn.disabled = true;
+  els.compareState.textContent = "comparing...";
+  els.baseCompareText.classList.remove("error");
+  els.loraCompareText.classList.remove("error");
+
+  try {
+    const response = await fetch("/api/compare", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        user_id: state.selectedUser?.user_id,
+        prompt,
+        model: els.modelInput.value.trim() || "llama3.1:8b",
+        base_model: els.baseModelInput.value.trim() || "Qwen/Qwen2.5-1.5B-Instruct",
+        adapter_path: els.adapterInput.value.trim(),
+        adapter_root: els.adapterRootInput.value.trim() || "data/lora_adapters",
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Comparison failed.");
+
+    els.baseCompareText.textContent = payload.base.ok ? payload.base.output : payload.base.error;
+    els.loraCompareText.textContent = payload.lora.ok ? payload.lora.output : payload.lora.error;
+    els.baseCompareText.classList.toggle("error", !payload.base.ok);
+    els.loraCompareText.classList.toggle("error", !payload.lora.ok);
+    els.compareState.textContent = `base vs ${payload.adapter_path || payload.adapter_root || "adapter"}`;
+  } catch (error) {
+    els.baseCompareText.textContent = error.message;
+    els.baseCompareText.classList.add("error");
+    els.compareState.textContent = "failed";
+  } finally {
+    els.compareBtn.disabled = false;
+  }
+}
+
 function populateTests() {
   const queries = state.selectedUser?.queries || [];
   els.testSelect.innerHTML = "";
@@ -244,6 +291,7 @@ async function runSelectedTest() {
 els.userSelect.addEventListener("change", (event) => selectUser(event.target.value));
 els.backendSelect.addEventListener("change", updateBackendUi);
 els.generateBtn.addEventListener("click", generate);
+els.compareBtn.addEventListener("click", compareBaseAndLora);
 els.testSelect.addEventListener("change", (event) => selectTest(event.target.value));
 els.runTestBtn.addEventListener("click", runSelectedTest);
 els.promptInput.addEventListener("keydown", (event) => {

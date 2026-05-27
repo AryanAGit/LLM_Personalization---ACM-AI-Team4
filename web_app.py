@@ -20,8 +20,12 @@ from enron_style import (
 
 ROOT = Path(__file__).resolve().parent
 WEB_ROOT = ROOT / "web"
-DEFAULT_HISTORY = ROOT / "data" / "processed" / "user_email_history.json"
-DEFAULT_PROFILES = ROOT / "data" / "processed" / "profile_user.json"
+GENERATED_HISTORY = ROOT / "data" / "processed" / "user_email_history.json"
+GENERATED_PROFILES = ROOT / "data" / "processed" / "profile_user.json"
+DEMO_HISTORY = ROOT / "lamp3_user_email_history.json"
+DEMO_PROFILES = ROOT / "lamp3_profile_user.json"
+DEFAULT_HISTORY = GENERATED_HISTORY if GENERATED_HISTORY.exists() else DEMO_HISTORY
+DEFAULT_PROFILES = GENERATED_PROFILES if GENERATED_PROFILES.exists() else DEMO_PROFILES
 
 
 class ReusableThreadingHTTPServer(ThreadingHTTPServer):
@@ -50,6 +54,9 @@ class StyleLabHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/generate":
             self.handle_generate()
+            return
+        if parsed.path == "/api/compare":
+            self.handle_compare()
             return
         if parsed.path == "/api/test":
             self.handle_test()
@@ -125,6 +132,89 @@ class StyleLabHandler(BaseHTTPRequestHandler):
                 "used_ollama": effective_backend == "ollama",
             }
         )
+
+    def handle_compare(self) -> None:
+        try:
+            payload = self.read_json()
+            prompt = str(payload.get("prompt", "")).strip()
+            user_id = str(payload.get("user_id") or self.histories[0]["user_id"])
+            model = str(payload.get("model") or self.model)
+            base_model = str(payload.get("base_model") or self.base_model)
+            adapter_path = str(payload.get("adapter_path") or self.adapter_path)
+            adapter_root = str(payload.get("adapter_root") or self.adapter_root)
+        except (ValueError, IndexError, KeyError, json.JSONDecodeError) as exc:
+            self.send_json({"error": f"Invalid request: {exc}"}, status=400)
+            return
+
+        if not prompt:
+            self.send_json({"error": "Prompt is required."}, status=400)
+            return
+
+        selected = self.find_user(user_id)
+        if not selected:
+            self.send_json({"error": f"Unknown user_id: {user_id}"}, status=404)
+            return
+
+        base_result = self.try_generate(
+            selected=selected,
+            prompt=prompt,
+            model=model,
+            backend="peft",
+            base_model=base_model,
+            adapter_path="",
+            adapter_root="",
+            user_id=user_id,
+        )
+        lora_result = self.try_generate(
+            selected=selected,
+            prompt=prompt,
+            model=model,
+            backend="peft",
+            base_model=base_model,
+            adapter_path=adapter_path,
+            adapter_root=adapter_root,
+            user_id=user_id,
+        )
+        self.send_json(
+            {
+                "user": self.serialize_user(selected),
+                "prompt": prompt,
+                "model": model,
+                "base_model": base_model,
+                "adapter_path": adapter_path,
+                "adapter_root": adapter_root,
+                "base": base_result,
+                "lora": lora_result,
+            }
+        )
+
+    def try_generate(
+        self,
+        selected: dict,
+        prompt: str,
+        model: str,
+        backend: str,
+        base_model: str,
+        adapter_path: str,
+        adapter_root: str,
+        user_id: str,
+    ) -> dict:
+        try:
+            output = generate_style_response(
+                profile=selected["profile"],
+                prompt=prompt,
+                use_ollama=False,
+                model=model,
+                backend=backend,
+                base_model=base_model,
+                adapter_path=adapter_path,
+                adapter_root=adapter_root,
+                user_id=user_id,
+                identity=selected.get("inferred_name", ""),
+            )
+            return {"ok": True, "output": output}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
 
     def handle_test(self) -> None:
         try:
@@ -321,8 +411,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the style generation web UI.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8787)
-    parser.add_argument("--history", default=str(DEFAULT_HISTORY))
-    parser.add_argument("--profiles", default=str(DEFAULT_PROFILES))
+    parser.add_argument(
+        "--history",
+        default=str(DEFAULT_HISTORY),
+        help="History JSON. Defaults to generated data when present, otherwise the checked-in demo file.",
+    )
+    parser.add_argument(
+        "--profiles",
+        default=str(DEFAULT_PROFILES),
+        help="Profile JSON. Defaults to generated data when present, otherwise the checked-in demo file.",
+    )
     parser.add_argument("--model", default="llama3.1:8b")
     parser.add_argument("--base-model", default="Qwen/Qwen2.5-1.5B-Instruct")
     parser.add_argument("--adapter-path", default="")
@@ -334,12 +432,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    history_path = Path(args.history)
+    history_path = Path(args.history).expanduser()
     if not history_path.exists():
         raise FileNotFoundError(f"Missing history JSON: {history_path}")
 
     StyleLabHandler.histories = load_history(history_path)
-    StyleLabHandler.profiles_by_id = load_profiles(Path(args.profiles))
+    StyleLabHandler.profiles_by_id = load_profiles(Path(args.profiles).expanduser())
     StyleLabHandler.model = args.model
     StyleLabHandler.base_model = args.base_model
     StyleLabHandler.adapter_path = args.adapter_path

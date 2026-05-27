@@ -236,7 +236,8 @@ textarea {
   color: #744d13;
 }
 
-#generateBtn {
+#generateBtn,
+#compareBtn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -254,7 +255,16 @@ textarea {
   background: var(--teal-dark);
 }
 
-#generateBtn:disabled {
+#compareBtn {
+  background: var(--ink);
+}
+
+#compareBtn:hover {
+  background: #263747;
+}
+
+#generateBtn:disabled,
+#compareBtn:disabled {
   cursor: wait;
   opacity: 0.7;
 }
@@ -275,6 +285,37 @@ textarea {
   background: #fff;
   min-height: 240px;
   overflow: hidden;
+}
+
+.compare-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compare-grid > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.compare-title {
+  border-bottom: 1px solid var(--line);
+  background: #fbfcfc;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 10px 12px;
+}
+
+#compareState {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .test-bench {
@@ -445,7 +486,9 @@ textarea {
   color: var(--coral);
 }
 
-#resultText {
+#resultText,
+#baseCompareText,
+#loraCompareText {
   margin: 0;
   padding: 16px;
   min-height: 210px;
@@ -456,6 +499,11 @@ textarea {
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     monospace;
   line-height: 1.55;
+}
+
+#baseCompareText,
+#loraCompareText {
+  min-height: 180px;
 }
 
 .error {
@@ -481,14 +529,20 @@ textarea {
 
   .composer {
     min-height: auto;
-    grid-template-rows: auto minmax(200px, auto) auto auto minmax(220px, auto);
+    grid-template-rows: auto minmax(200px, auto) auto auto minmax(220px, auto) auto;
   }
 
   .bench-header,
   .bench-controls,
   .comparison-grid,
-  .score-grid {
+  .score-grid,
+  .compare-grid {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .compare-grid > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--line);
   }
 }

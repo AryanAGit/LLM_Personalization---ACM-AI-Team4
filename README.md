@@ -84,6 +84,8 @@ python3 run_app.py
 
 Open `http://127.0.0.1:8787`. The page includes a prompt composer, backend selector, Qwen/LoRA fields, and a Test Bench that compares a held-out incoming prompt, the real user response, the generated response, and similarity/style scores. The default backend is the local fallback so the site works even when Ollama or a Hugging Face model is not loaded.
 
+The web app defaults to generated files in `data/processed` when they exist locally. Fresh clones that do not have local generated data automatically use the checked-in demo JSON files, so `python3 run_app.py` is enough to launch the frontend.
+
 ## LoRA And RAG Direction
 
 Use the generated JSON as supervised fine-tuning data by converting each query into an instruction/output pair where the instruction includes the style profile plus retrieved examples, and the output is the held-out gold email. The intended split of responsibility is:

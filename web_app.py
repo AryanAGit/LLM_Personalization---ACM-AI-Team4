@@ -255,10 +255,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
                 user_id=user_id,
                 identity=selected.get("inferred_name", ""),
             )
-            scores = score_prediction(output, query["gold"])
-            scores.update(score_against_profile(output, selected.get("profile", [])))
-            effective_backend = backend
-            warning = ""
+            scores = score_prediction(output, query["gold"], profile=selected["profile"])
         except Exception as exc:
             if backend != "peft" or not is_lora_quality_failure(exc):
                 self.send_json({"error": str(exc)}, status=500)

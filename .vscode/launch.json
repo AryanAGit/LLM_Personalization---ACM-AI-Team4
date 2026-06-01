@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Enron Style Lab",
+      "name": "Run LoRA Voice Lab",
       "type": "python",
       "request": "launch",
       "program": "${workspaceFolder}/run_app.py",

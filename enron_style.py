@@ -324,6 +324,7 @@ def generate_style_response(
     identity: str = "",
     backend: str = "",
     adapter_path: str = "",
+    adapter_subfolder: str = "",
     adapter_root: str = "",
     base_model: str = "",
     user_id=0,
@@ -420,6 +421,7 @@ def generate_style_response(
                 messages=messages,
                 base_model=base_model or model,
                 adapter_path=resolved_adapter,
+                adapter_subfolder=adapter_subfolder,
             )
             cleaned = clean_model_response(content, identity=identity, prompt=prompt)
             cleaned = enforce_outbound_recipient(cleaned, prompt)
@@ -605,6 +607,7 @@ def evaluate_history(
     model: str = "llama3.1:8b",
     backend: str = "",
     adapter_path: str = "",
+    adapter_subfolder: str = "",
     adapter_root: str = "",
     base_model: str = "",
 ) -> dict:
@@ -626,6 +629,7 @@ def evaluate_history(
                 model=model,
                 backend=backend,
                 adapter_path=adapter_path,
+                adapter_subfolder=adapter_subfolder,
                 adapter_root=adapter_root,
                 base_model=base_model,
                 user_id=history.get("user_id", ""),

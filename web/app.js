@@ -1,5 +1,6 @@
 const state = {
   users: [],
+  presets: [],
   selectedUser: null,
 };
 
@@ -12,11 +13,13 @@ const els = {
   queryStat: document.querySelector("#queryStat"),
   styleText: document.querySelector("#styleText"),
   promptInput: document.querySelector("#promptInput"),
+  presetSelect: document.querySelector("#presetSelect"),
   backendSelect: document.querySelector("#backendSelect"),
   backendLabel: document.querySelector("#backendLabel"),
   modelInput: document.querySelector("#modelInput"),
   baseModelInput: document.querySelector("#baseModelInput"),
   adapterInput: document.querySelector("#adapterInput"),
+  adapterSubfolderInput: document.querySelector("#adapterSubfolderInput"),
   adapterRootInput: document.querySelector("#adapterRootInput"),
   generateBtn: document.querySelector("#generateBtn"),
   compareBtn: document.querySelector("#compareBtn"),
@@ -28,6 +31,7 @@ const els = {
   copyBtn: document.querySelector("#copyBtn"),
   testSelect: document.querySelector("#testSelect"),
   runTestBtn: document.querySelector("#runTestBtn"),
+  benchDescription: document.querySelector("#benchDescription"),
   // Content fidelity
   rouge1Score: document.querySelector("#rouge1Score"),
   rougeLScore: document.querySelector("#rougeLScore"),
@@ -53,12 +57,11 @@ const els = {
 };
 
 function selectedBackend() {
-  return els.backendSelect.value || "ollama";
+  return els.backendSelect.value || "peft";
 }
 
 function statusForBackend(prefix) {
   const backend = selectedBackend();
-  if (backend === "ollama") return `${prefix} Ollama RAG...`;
   if (backend === "peft") return `${prefix} LoRA...`;
   return "Using template fallback...";
 }
@@ -71,19 +74,49 @@ function generationLabel(payload) {
     const adapter = payload.adapter_path
       ? ` + ${payload.adapter_path}`
       : ` + ${payload.adapter_root || "per-user adapter root"}`;
-    return `Generated with LoRA ${payload.base_model || ""}${adapter}`.trim();
+    const subfolder = payload.adapter_subfolder ? `/${payload.adapter_subfolder}` : "";
+    return `Generated with LoRA ${payload.base_model || ""}${adapter}${subfolder}`.trim();
   }
   return "Generated with template fallback";
 }
 
+function selectedPreset() {
+  return state.presets.find((preset) => preset.id === els.presetSelect.value) || null;
+}
+
 function updateBackendUi() {
   const backend = selectedBackend();
-  const labels = { fallback: "Template Fallback", ollama: "Ollama RAG", peft: "LoRA" };
-  els.backendLabel.textContent = labels[backend] || "Ollama RAG";
-  els.modelInput.disabled = backend !== "ollama";
+  const labels = { fallback: "Template Fallback", peft: "LoRA" };
+  els.backendLabel.textContent = labels[backend] || "LoRA";
+  els.modelInput.disabled = true;
   els.baseModelInput.disabled = backend !== "peft";
   els.adapterInput.disabled = backend !== "peft";
+  els.adapterSubfolderInput.disabled = backend !== "peft";
   els.adapterRootInput.disabled = backend !== "peft";
+}
+
+function applyPreset(preset) {
+  if (!preset) return;
+  els.presetSelect.value = preset.id;
+  els.backendSelect.value = "peft";
+  els.baseModelInput.value = preset.base_model || "Qwen/Qwen2.5-1.5B-Instruct";
+  els.adapterInput.value = preset.adapter_path || "";
+  els.adapterSubfolderInput.value = preset.adapter_subfolder || "";
+  els.adapterRootInput.value = "";
+  updateBackendUi();
+}
+
+async function loadPresets() {
+  const response = await fetch("/api/model-presets");
+  const payload = await response.json();
+  state.presets = payload.presets || [];
+
+  for (const preset of state.presets) {
+    const option = document.createElement("option");
+    option.value = preset.id;
+    option.textContent = preset.label;
+    els.presetSelect.appendChild(option);
+  }
 }
 
 async function loadUsers() {
@@ -101,7 +134,7 @@ async function loadUsers() {
 
   if (state.users.length) {
     selectUser(state.users[0].user_id);
-    els.statusText.textContent = `${state.users.length} voice loaded from local corpus data`;
+    els.statusText.textContent = `${state.users.length} LoRA voices loaded`;
   } else {
     els.statusText.textContent = "No voices found";
   }
@@ -110,6 +143,16 @@ async function loadUsers() {
 function selectUser(userId) {
   state.selectedUser = state.users.find((user) => String(user.user_id) === String(userId));
   if (!state.selectedUser) return;
+  if (state.selectedUser.hf_preset) {
+    applyPreset(state.selectedUser.hf_preset);
+  } else if (els.presetSelect.value) {
+    els.presetSelect.value = "";
+    els.backendSelect.value = "fallback";
+    els.adapterInput.value = "";
+    els.adapterSubfolderInput.value = "";
+    els.adapterRootInput.value = "";
+    updateBackendUi();
+  }
 
   els.nameStat.textContent = state.selectedUser.inferred_name || "-";
   els.mailboxStat.textContent = state.selectedUser.source_user || "-";
@@ -143,7 +186,8 @@ async function generate() {
         use_ollama: selectedBackend() === "ollama",
         base_model: els.baseModelInput.value.trim() || "Qwen/Qwen2.5-1.5B-Instruct",
         adapter_path: els.adapterInput.value.trim(),
-        adapter_root: els.adapterRootInput.value.trim() || "data/lora_adapters",
+        adapter_subfolder: els.adapterSubfolderInput.value.trim(),
+        adapter_root: els.adapterRootInput.value.trim(),
       }),
     });
     const payload = await response.json();
@@ -183,7 +227,8 @@ async function compareBaseAndLora() {
         model: els.modelInput.value.trim() || "llama3.1:8b",
         base_model: els.baseModelInput.value.trim() || "Qwen/Qwen2.5-1.5B-Instruct",
         adapter_path: els.adapterInput.value.trim(),
-        adapter_root: els.adapterRootInput.value.trim() || "data/lora_adapters",
+        adapter_subfolder: els.adapterSubfolderInput.value.trim(),
+        adapter_root: els.adapterRootInput.value.trim(),
       }),
     });
     const payload = await response.json();
@@ -193,7 +238,10 @@ async function compareBaseAndLora() {
     els.loraCompareText.textContent = payload.lora.ok ? payload.lora.output : payload.lora.error;
     els.baseCompareText.classList.toggle("error", !payload.base.ok);
     els.loraCompareText.classList.toggle("error", !payload.lora.ok);
-    els.compareState.textContent = `base vs ${payload.adapter_path || payload.adapter_root || "adapter"}`;
+    const adapterLabel = [payload.adapter_path || payload.adapter_root || "adapter", payload.adapter_subfolder]
+      .filter(Boolean)
+      .join("/");
+    els.compareState.textContent = `base vs ${adapterLabel}`;
   } catch (error) {
     els.baseCompareText.textContent = error.message;
     els.baseCompareText.classList.add("error");
@@ -215,11 +263,24 @@ function populateTests() {
   }
 
   if (queries.length) {
+    els.testSelect.disabled = false;
+    els.runTestBtn.disabled = false;
+    els.benchDescription.textContent = "Compare generated passages against held-out Enron validation passages.";
     selectTest(queries[0].id);
   } else {
-    els.incomingText.textContent = "No held-out tests found for this voice.";
+    const label = state.selectedUser?.inferred_name || "this voice";
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No held-out examples";
+    els.testSelect.appendChild(option);
+    els.testSelect.disabled = true;
+    els.runTestBtn.disabled = true;
+    els.benchDescription.textContent = `No held-out validation set is available for ${label}.`;
+    els.incomingText.textContent = `No held-out validation examples are available for ${label}.`;
     els.actualText.textContent = "-";
     els.generatedTestText.textContent = "-";
+    els.testMeta.textContent = "-";
+    els.testState.textContent = "unavailable";
     resetScores();
   }
 }
@@ -316,7 +377,8 @@ async function runSelectedTest() {
         use_ollama: selectedBackend() === "ollama",
         base_model: els.baseModelInput.value.trim() || "Qwen/Qwen2.5-1.5B-Instruct",
         adapter_path: els.adapterInput.value.trim(),
-        adapter_root: els.adapterRootInput.value.trim() || "data/lora_adapters",
+        adapter_subfolder: els.adapterSubfolderInput.value.trim(),
+        adapter_root: els.adapterRootInput.value.trim(),
       }),
     });
     const payload = await response.json();
@@ -326,7 +388,7 @@ async function runSelectedTest() {
     els.actualText.textContent = payload.actual;
     els.generatedTestText.textContent = payload.generated;
     renderScores(payload.scores);
-    els.testState.textContent = payload.used_ollama ? `generated with ${payload.model}` : "generated with fallback";
+    els.testState.textContent = generationLabel(payload);
   } catch (error) {
     els.generatedTestText.textContent = error.message;
     els.generatedTestText.classList.add("error");
@@ -337,6 +399,16 @@ async function runSelectedTest() {
 }
 
 els.userSelect.addEventListener("change", (event) => selectUser(event.target.value));
+els.presetSelect.addEventListener("change", () => {
+  const preset = selectedPreset();
+  if (preset) {
+    applyPreset(preset);
+    if (state.users.some((user) => String(user.user_id) === preset.id)) {
+      els.userSelect.value = preset.id;
+      selectUser(preset.id);
+    }
+  }
+});
 els.backendSelect.addEventListener("change", updateBackendUi);
 els.generateBtn.addEventListener("click", generate);
 els.compareBtn.addEventListener("click", compareBaseAndLora);
@@ -361,7 +433,7 @@ els.copyBtn.addEventListener("click", async () => {
 });
 
 updateBackendUi();
-loadUsers().catch((error) => {
+loadPresets().then(loadUsers).catch((error) => {
   els.statusText.textContent = "Could not load users";
   els.resultText.textContent = error.message;
   els.resultText.classList.add("error");

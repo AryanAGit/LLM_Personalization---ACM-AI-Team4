@@ -24,8 +24,59 @@ GENERATED_HISTORY = ROOT / "data" / "processed" / "user_email_history.json"
 GENERATED_PROFILES = ROOT / "data" / "processed" / "profile_user.json"
 DEMO_HISTORY = ROOT / "lamp3_user_email_history.json"
 DEMO_PROFILES = ROOT / "lamp3_profile_user.json"
-DEFAULT_HISTORY = GENERATED_HISTORY if GENERATED_HISTORY.exists() else DEMO_HISTORY
-DEFAULT_PROFILES = GENERATED_PROFILES if GENERATED_PROFILES.exists() else DEMO_PROFILES
+PER_USER_HISTORY = ROOT / "per_user.json"
+DEFAULT_HISTORY = PER_USER_HISTORY
+DEFAULT_PROFILES = DEMO_PROFILES
+DEFAULT_HF_BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
+DEFAULT_HF_ADAPTER_REPO = "alchin2/lora-project"
+HF_MODEL_PRESETS = [
+    {
+        "id": "hf_obama",
+        "label": "Barack Obama",
+        "source_user": "Hugging Face: Obama_v2",
+        "base_model": DEFAULT_HF_BASE_MODEL,
+        "adapter_path": DEFAULT_HF_ADAPTER_REPO,
+        "adapter_subfolder": "Obama_v2",
+        "style": "Team LoRA adapter trained for Barack Obama-style public speech.",
+    },
+    {
+        "id": "hf_trump",
+        "label": "Donald Trump",
+        "source_user": "Hugging Face: trump",
+        "base_model": DEFAULT_HF_BASE_MODEL,
+        "adapter_path": DEFAULT_HF_ADAPTER_REPO,
+        "adapter_subfolder": "trump",
+        "style": "Team LoRA adapter trained for Donald Trump-style short-form public posts.",
+    },
+    {
+        "id": "hf_twain",
+        "label": "Mark Twain",
+        "source_user": "Hugging Face: Twain_v1",
+        "base_model": DEFAULT_HF_BASE_MODEL,
+        "adapter_path": DEFAULT_HF_ADAPTER_REPO,
+        "adapter_subfolder": "Twain_v1",
+        "style": "Team LoRA adapter trained for Mark Twain-style literary prose.",
+    },
+    {
+        "id": "hf_enron",
+        "label": "Enron",
+        "source_user": "Hugging Face: Enron",
+        "base_model": DEFAULT_HF_BASE_MODEL,
+        "adapter_path": DEFAULT_HF_ADAPTER_REPO,
+        "adapter_subfolder": "Enron",
+        "style": "Team LoRA adapter trained on Enron-style business email data.",
+        "validation_source": "per_user",
+    },
+    {
+        "id": "hf_jefferson",
+        "label": "Thomas Jefferson",
+        "source_user": "Hugging Face: Jefferson_Model",
+        "base_model": DEFAULT_HF_BASE_MODEL,
+        "adapter_path": DEFAULT_HF_ADAPTER_REPO,
+        "adapter_subfolder": "Jefferson_Model",
+        "style": "Team LoRA adapter trained for Thomas Jefferson-style historical prose.",
+    },
+]
 
 
 class ReusableThreadingHTTPServer(ThreadingHTTPServer):
@@ -38,12 +89,15 @@ class StyleLabHandler(BaseHTTPRequestHandler):
     model = "llama3.1:8b"
     base_model = "Qwen/Qwen2.5-1.5B-Instruct"
     adapter_path = ""
-    adapter_root = "data/lora_adapters"
+    adapter_root = ""
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/users":
             self.send_json({"users": self.serialize_users()})
+            return
+        if parsed.path == "/api/model-presets":
+            self.send_json({"presets": HF_MODEL_PRESETS})
             return
         if parsed.path == "/":
             self.serve_file(WEB_ROOT / "index.html")
@@ -74,6 +128,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
             model = str(payload.get("model") or self.model)
             base_model = str(payload.get("base_model") or self.base_model)
             adapter_path = str(payload.get("adapter_path") or self.adapter_path)
+            adapter_subfolder = str(payload.get("adapter_subfolder") or "")
             adapter_root = str(payload.get("adapter_root") or self.adapter_root)
         except (ValueError, IndexError, KeyError, json.JSONDecodeError) as exc:
             self.send_json({"error": f"Invalid request: {exc}"}, status=400)
@@ -87,6 +142,12 @@ class StyleLabHandler(BaseHTTPRequestHandler):
         if not selected:
             self.send_json({"error": f"Unknown user_id: {user_id}"}, status=404)
             return
+        base_model, adapter_path, adapter_subfolder = self.resolve_hf_settings(
+            selected,
+            base_model,
+            adapter_path,
+            adapter_subfolder,
+        )
 
         try:
             output = generate_style_response(
@@ -97,6 +158,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
                 backend=backend,
                 base_model=base_model,
                 adapter_path=adapter_path,
+                adapter_subfolder=adapter_subfolder,
                 adapter_root=adapter_root,
                 user_id=user_id,
                 identity=selected.get("inferred_name", ""),
@@ -125,6 +187,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
                 "model": model,
                 "base_model": base_model,
                 "adapter_path": adapter_path,
+                "adapter_subfolder": adapter_subfolder,
                 "adapter_root": adapter_root,
                 "backend": effective_backend,
                 "requested_backend": backend,
@@ -141,6 +204,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
             model = str(payload.get("model") or self.model)
             base_model = str(payload.get("base_model") or self.base_model)
             adapter_path = str(payload.get("adapter_path") or self.adapter_path)
+            adapter_subfolder = str(payload.get("adapter_subfolder") or "")
             adapter_root = str(payload.get("adapter_root") or self.adapter_root)
         except (ValueError, IndexError, KeyError, json.JSONDecodeError) as exc:
             self.send_json({"error": f"Invalid request: {exc}"}, status=400)
@@ -154,6 +218,12 @@ class StyleLabHandler(BaseHTTPRequestHandler):
         if not selected:
             self.send_json({"error": f"Unknown user_id: {user_id}"}, status=404)
             return
+        base_model, adapter_path, adapter_subfolder = self.resolve_hf_settings(
+            selected,
+            base_model,
+            adapter_path,
+            adapter_subfolder,
+        )
 
         base_result = self.try_generate(
             selected=selected,
@@ -162,6 +232,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
             backend="peft",
             base_model=base_model,
             adapter_path="",
+            adapter_subfolder="",
             adapter_root="",
             user_id=user_id,
         )
@@ -172,6 +243,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
             backend="peft",
             base_model=base_model,
             adapter_path=adapter_path,
+            adapter_subfolder=adapter_subfolder,
             adapter_root=adapter_root,
             user_id=user_id,
         )
@@ -182,6 +254,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
                 "model": model,
                 "base_model": base_model,
                 "adapter_path": adapter_path,
+                "adapter_subfolder": adapter_subfolder,
                 "adapter_root": adapter_root,
                 "base": base_result,
                 "lora": lora_result,
@@ -196,6 +269,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
         backend: str,
         base_model: str,
         adapter_path: str,
+        adapter_subfolder: str,
         adapter_root: str,
         user_id: str,
     ) -> dict:
@@ -208,6 +282,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
                 backend=backend,
                 base_model=base_model,
                 adapter_path=adapter_path,
+                adapter_subfolder=adapter_subfolder,
                 adapter_root=adapter_root,
                 user_id=user_id,
                 identity=selected.get("inferred_name", ""),
@@ -227,6 +302,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
             model = str(payload.get("model") or self.model)
             base_model = str(payload.get("base_model") or self.base_model)
             adapter_path = str(payload.get("adapter_path") or self.adapter_path)
+            adapter_subfolder = str(payload.get("adapter_subfolder") or "")
             adapter_root = str(payload.get("adapter_root") or self.adapter_root)
         except (ValueError, IndexError, KeyError, json.JSONDecodeError) as exc:
             self.send_json({"error": f"Invalid request: {exc}"}, status=400)
@@ -236,10 +312,22 @@ class StyleLabHandler(BaseHTTPRequestHandler):
         if not selected:
             self.send_json({"error": f"Unknown user_id: {user_id}"}, status=404)
             return
+        base_model, adapter_path, adapter_subfolder = self.resolve_hf_settings(
+            selected,
+            base_model,
+            adapter_path,
+            adapter_subfolder,
+        )
 
         query = self.find_query(selected, query_id)
         if not query:
-            self.send_json({"error": f"Unknown query_id: {query_id}"}, status=404)
+            if not selected.get("query"):
+                self.send_json(
+                    {"error": f"No held-out validation examples are available for {selected.get('inferred_name', 'this voice')}."},
+                    status=400,
+                )
+            else:
+                self.send_json({"error": f"Unknown query_id: {query_id}"}, status=404)
             return
 
         try:
@@ -251,11 +339,14 @@ class StyleLabHandler(BaseHTTPRequestHandler):
                 backend=backend,
                 base_model=base_model,
                 adapter_path=adapter_path,
+                adapter_subfolder=adapter_subfolder,
                 adapter_root=adapter_root,
                 user_id=user_id,
                 identity=selected.get("inferred_name", ""),
             )
             scores = score_prediction(output, query["gold"], profile=selected["profile"])
+            effective_backend = backend
+            warning = ""
         except Exception as exc:
             if backend != "peft" or not is_lora_quality_failure(exc):
                 self.send_json({"error": str(exc)}, status=500)
@@ -283,6 +374,7 @@ class StyleLabHandler(BaseHTTPRequestHandler):
                 "model": model,
                 "base_model": base_model,
                 "adapter_path": adapter_path,
+                "adapter_subfolder": adapter_subfolder,
                 "adapter_root": adapter_root,
                 "backend": effective_backend,
                 "requested_backend": backend,
@@ -292,7 +384,42 @@ class StyleLabHandler(BaseHTTPRequestHandler):
         )
 
     def find_user(self, user_id) -> Optional[dict]:
+        preset = self.find_hf_preset(user_id)
+        if preset:
+            validation_history = self.validation_history_for_preset(preset)
+            return {
+                "user_id": preset["id"],
+                "source_user": preset["source_user"],
+                "inferred_name": preset["label"],
+                "profile": validation_history.get("profile", []),
+                "query": validation_history.get("query", []),
+                "hf_preset": preset,
+            }
         return next((item for item in self.histories if str(item["user_id"]) == str(user_id)), None)
+
+    def find_hf_preset(self, preset_id: str) -> Optional[dict]:
+        return next((preset for preset in HF_MODEL_PRESETS if preset["id"] == str(preset_id)), None)
+
+    def resolve_hf_settings(
+        self,
+        selected: dict,
+        base_model: str,
+        adapter_path: str,
+        adapter_subfolder: str,
+    ) -> Tuple[str, str, str]:
+        preset = selected.get("hf_preset")
+        if not preset:
+            return base_model, adapter_path, adapter_subfolder
+        return (
+            preset.get("base_model", base_model),
+            preset.get("adapter_path", adapter_path),
+            preset.get("adapter_subfolder", adapter_subfolder),
+        )
+
+    def validation_history_for_preset(self, preset: dict) -> dict:
+        if preset.get("validation_source") != "per_user" or not self.histories:
+            return {"profile": [], "query": []}
+        return self.histories[0]
 
     def find_query(self, history: dict, query_id: str) -> Optional[dict]:
         queries = history.get("query", [])
@@ -311,9 +438,23 @@ class StyleLabHandler(BaseHTTPRequestHandler):
         }
 
     def serialize_users(self) -> list:
-        return [self.serialize_user(history) for history in self.histories]
+        return [self.serialize_preset_user(preset) for preset in HF_MODEL_PRESETS]
+
+    def serialize_preset_user(self, preset: dict) -> dict:
+        validation_history = self.validation_history_for_preset(preset)
+        return {
+            "user_id": preset["id"],
+            "source_user": preset["source_user"],
+            "inferred_name": preset["label"],
+            "profile_count": len(validation_history.get("profile", [])),
+            "query_count": len(validation_history.get("query", [])),
+            "style": preset["style"],
+            "queries": [self.serialize_query(query) for query in validation_history.get("query", [])],
+            "hf_preset": preset,
+        }
 
     def serialize_user(self, history: dict) -> dict:
+        preset = history.get("hf_preset")
         user_id = history["user_id"]
         return {
             "user_id": user_id,
@@ -321,8 +462,11 @@ class StyleLabHandler(BaseHTTPRequestHandler):
             "inferred_name": history.get("inferred_name", ""),
             "profile_count": len(history.get("profile", [])),
             "query_count": len(history.get("query", [])),
-            "style": self.profiles_by_id.get(user_id, "") or describe_profile_style(history),
+            "style": (preset or {}).get("style")
+            or self.profiles_by_id.get(user_id, "")
+            or describe_profile_style(history),
             "queries": [self.serialize_query(query) for query in history.get("query", [])],
+            **({"hf_preset": preset} if preset else {}),
         }
 
     def read_json(self) -> dict:
@@ -366,6 +510,59 @@ def load_profiles(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as handle:
         profiles = json.load(handle)
     return {item["id"]: item.get("output", "") for item in profiles}
+
+
+def load_web_history(path: Path) -> list:
+    histories = load_history(path)
+    if histories and "examples" in histories[0]:
+        return convert_per_user_history(histories)
+    return histories
+
+
+def convert_per_user_history(users: list, profile_size: int = 80, query_count: int = 5) -> list:
+    histories = []
+    for user in users:
+        examples = user.get("examples", [])
+        profile_examples = examples[:profile_size]
+        query_examples = examples[profile_size : profile_size + query_count]
+        if not query_examples:
+            query_examples = examples[:query_count]
+        histories.append(
+            {
+                "user_id": user.get("user_id", ""),
+                "source_user": user.get("sender_email", ""),
+                "inferred_name": infer_name_from_email(user.get("sender_email", "")),
+                "profile": [
+                    {
+                        "id": item.get("id", ""),
+                        "subject": item.get("subject", ""),
+                        "body": item.get("reply", ""),
+                    }
+                    for item in profile_examples
+                ],
+                "query": [
+                    {
+                        "id": f"{user.get('user_id', '')}_{item.get('id', index)}",
+                        "input": build_query_input(item),
+                        "gold": item.get("reply", ""),
+                    }
+                    for index, item in enumerate(query_examples, start=1)
+                ],
+            }
+        )
+    return histories
+
+
+def build_query_input(item: dict) -> str:
+    subject = item.get("subject", "") or "(no subject)"
+    received = item.get("received", "")
+    return f"Write a reply to this email in the user's style.\n\nSubject: {subject}\n\nIncoming email:\n{received}"
+
+
+def infer_name_from_email(email: str) -> str:
+    local = email.split("@", 1)[0]
+    parts = [part for part in local.replace(".", " ").replace("_", " ").split() if part]
+    return " ".join(part.capitalize() for part in parts) or "Unknown"
 
 
 def describe_profile_style(history: dict) -> str:
@@ -421,7 +618,7 @@ def main() -> None:
     parser.add_argument("--model", default="llama3.1:8b")
     parser.add_argument("--base-model", default="Qwen/Qwen2.5-1.5B-Instruct")
     parser.add_argument("--adapter-path", default="")
-    parser.add_argument("--adapter-root", default="data/lora_adapters")
+    parser.add_argument("--adapter-root", default="")
     parser.add_argument(
         "--open",
         action="store_true",
@@ -433,7 +630,7 @@ def main() -> None:
     if not history_path.exists():
         raise FileNotFoundError(f"Missing history JSON: {history_path}")
 
-    StyleLabHandler.histories = load_history(history_path)
+    StyleLabHandler.histories = load_web_history(history_path)
     StyleLabHandler.profiles_by_id = load_profiles(Path(args.profiles).expanduser())
     StyleLabHandler.model = args.model
     StyleLabHandler.base_model = args.base_model
